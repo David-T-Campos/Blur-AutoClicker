@@ -17,6 +17,36 @@ use crate::engine::worker::start_clicker_inner;
 use crate::engine::worker::stop_clicker_inner;
 use crate::hotkeys::register_hotkey_inner;
 
+
+#[tauri::command]
+pub fn get_text_scale_factor() -> f64 {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::HKEY_CURRENT_USER;
+        use winreg::RegKey;
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let key = hkcu
+            .open_subkey(r"Software\Microsoft\Accessibility")
+            .ok();
+
+        if let Some(key) = key {
+            let value: u32 = key.get_value("TextScaleFactor").unwrap_or(100);
+            return value as f64 / 100.0;
+        }
+    }
+
+    1.0
+}
+#[tauri::command]
+pub fn set_webview_zoom(window: tauri::Window, factor: f64) -> Result<(), String> {
+    window
+        .get_webview_window("main")
+        .ok_or("webview not found".to_string())?
+        .set_zoom(factor)
+        .map_err(|e: tauri::Error| e.to_string())
+}
+
 #[tauri::command]
 pub fn start_clicker(app: AppHandle) -> Result<ClickerStatusPayload, String> {
     start_clicker_inner(&app)
@@ -143,4 +173,21 @@ pub fn get_stats() -> Result<CumulativeStats, String> {
 #[tauri::command]
 pub fn reset_stats() -> Result<CumulativeStats, String> {
     crate::engine::stats::reset_stats()
+}
+
+#[tauri::command]
+pub fn get_autostart_enabled() -> bool {
+    crate::autostart::get_autostart_enabled()
+}
+
+#[tauri::command]
+pub fn set_autostart_enabled(enabled: bool) -> Result<(), String> {
+    crate::autostart::set_autostart_enabled(enabled).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn quit_app(app: AppHandle) {
+    crate::overlay::OVERLAY_THREAD_RUNNING
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    app.exit(0);
 }
